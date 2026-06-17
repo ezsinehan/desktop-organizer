@@ -154,7 +154,12 @@ function Organize-LooseFiles {
 
 #region ---------- TUI ----------
 function Read-Key {
-  $k = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+  # Drop anything already sitting in the buffer (stray paste remnants, held keys)
+  # so each card waits for a fresh, deliberate keypress.
+  try { $Host.UI.RawUI.FlushInputBuffer() } catch {}
+  do {
+    $k = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+  } while ([int]$k.Character -eq 0)   # skip modifier-only keys (Shift, Ctrl, ...); Enter still counts
   return [string]$k.Character
 }
 
