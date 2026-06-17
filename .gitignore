@@ -1,0 +1,5 @@
+# nothing to build here, but keep local cruft out of the repo
+.claude/
+*.log
+Thumbs.db
+desktop.ini
