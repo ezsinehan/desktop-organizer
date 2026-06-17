@@ -74,11 +74,23 @@ everything lives at the top of `DesktopOrganizer.ps1`:
 - `$FileRoutes` — extension → destination folder for the loose-file sweep.
 - `$ArchiveDir` — where `[A]rchive` drops things.
 
-## the honest caveat
+## the honest caveat (read this)
 
-it backs up to a **private** repo, but it does not scan your folders for secrets
-first. if a folder has an api key or token in it, that's on you to pull out before
-you push. (ask me how i know.)
+backups go to a **private** repo (`gh repo create --private`). but **private is not
+the same as safe for a secret** — don't let it lull you:
+
+- **it's permanent in git history.** once a token is committed and pushed it lives
+  in that repo forever, even if you delete the file in a later commit. removing it
+  for real means rewriting history, not just `rm`.
+- **private repos don't stay private by guarantee.** flip it public later, add a
+  collaborator, or get your account popped, and the secret leaks with it.
+- **a leaked token is already compromised** the moment it's sitting in plaintext on
+  disk. private hosting doesn't un-expose it.
+
+so: the tool does **not** scan your folders for secrets before pushing. if a folder
+has an api key, bot token, or `.env` in it, pull it out **and rotate the key** before
+you back anything up. (ask me how i know — there was a discord bot token chilling in
+my notes folder.)
 
 ---
 

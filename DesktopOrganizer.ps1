@@ -198,8 +198,50 @@ function Write-Card {
   Write-Host -NoNewline "   > "
 }
 
+function Show-Info {
+  Show-Banner
+  Write-Host "   what is this?" -ForegroundColor White
+  Write-Host "   your desktop fills up with half-finished projects, random installers," -ForegroundColor Gray
+  Write-Host "   and files you forgot about. this walks you through all of it, one card" -ForegroundColor Gray
+  Write-Host "   at a time. you press ONE key per item. that's the whole thing.`n" -ForegroundColor Gray
+
+  Write-Host "   it already knows:" -ForegroundColor White
+  Write-Host "    . which folders are git repos that are clean + already on github" -ForegroundColor Gray
+  Write-Host "    . which have unpushed commits or uncommitted work (even nested repos)" -ForegroundColor Gray
+  Write-Host "    . which exist ONLY on this laptop and aren't backed up anywhere" -ForegroundColor Gray
+  Write-Host "    . which loose files are just clutter to sweep into folders`n" -ForegroundColor Gray
+
+  Write-Host "   your one-key moves:" -ForegroundColor White
+  Write-Host "    [P] push / back up to a PRIVATE github repo" -ForegroundColor Yellow
+  Write-Host "    [B] back up to a private repo, THEN recycle it (reclaim the space)" -ForegroundColor Yellow
+  Write-Host "    [A] archive  -> moves it to Desktop\Archive" -ForegroundColor Cyan
+  Write-Host "    [D] delete   -> recycle bin, never permanent" -ForegroundColor Yellow
+  Write-Host "    [O] open in explorer to peek, then ask again" -ForegroundColor Gray
+  Write-Host "    [K] keep / skip   (enter does the same)" -ForegroundColor DarkGray
+  Write-Host "    [Q] quit`n" -ForegroundColor DarkGray
+
+  Write-Host "   nothing here is destructive: deletes go to the recycle bin," -ForegroundColor Gray
+  Write-Host "   backups go to PRIVATE repos, and a plain scan changes nothing.`n" -ForegroundColor Gray
+
+  Write-Rainbow "   !! the one warning that matters !!"
+  Write-Host "   private is NOT the same as safe for a secret. this tool does not scan" -ForegroundColor White
+  Write-Host "   for api keys or tokens before pushing, and anything you commit lives in" -ForegroundColor White
+  Write-Host "   git history forever. got a token/.env in a folder? pull it out AND" -ForegroundColor White
+  Write-Host "   rotate the key before you back that folder up. no exceptions.`n" -ForegroundColor White
+  Write-Host "   ----------------------------------------------------------" -ForegroundColor DarkGray
+  Write-Host "   full details: README.md  .  built by sinehan -> sinehan.dev" -ForegroundColor DarkGray
+}
+
 function Start-DesktopTriage {
   param([string]$Root = $script:DesktopRoot)
+  Show-Banner
+  Write-Host "   press [i] for info / how it works  .  any other key to start`n" -ForegroundColor DarkGray
+  Write-Host -NoNewline "   > "
+  if ((Read-Key).ToUpper() -eq 'I') {
+    Show-Info
+    Write-Host "`n   press any key to begin triage..." -ForegroundColor DarkGray
+    [void](Read-Key)
+  }
   Show-Banner
   Write-Host '   scanning your desktop...' -ForegroundColor DarkGray
   $inv = @(Get-DesktopInventory -Root $Root)
@@ -252,11 +294,12 @@ function Show-Summary {
 }
 
 Set-Alias triage Start-DesktopTriage
+Set-Alias info   Show-Info
 #endregion
 
 # When executed directly (not dot-sourced), launch the TUI.
 if ($MyInvocation.InvocationName -ne '.') {
   Start-DesktopTriage
 } else {
-  Write-Host "DesktopOrganizer loaded. Commands: Show-DesktopReport | triage | Backup-ToPrivateRepo | Move-ToArchive | Remove-ItemToRecycle | Organize-LooseFiles" -ForegroundColor Magenta
+  Write-Host "DesktopOrganizer loaded. Commands: info | triage | Show-DesktopReport | Backup-ToPrivateRepo | Move-ToArchive | Remove-ItemToRecycle | Organize-LooseFiles" -ForegroundColor Magenta
 }
