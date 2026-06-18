@@ -1,5 +1,5 @@
 <#
-  DesktopOrganizer - an interactive "desktop inbox-zero" triage tool.
+  DesktopOrganizer - an interactive desktop triage tool.
 
   Run it:        powershell -ExecutionPolicy Bypass -File .\DesktopOrganizer.ps1
   Or dot-source:  . .\DesktopOrganizer.ps1   (loads the functions without the TUI)
@@ -211,7 +211,7 @@ function Show-Banner {
   Write-Host ''
   Write-Rainbow '   #####  #####  #### #   # ####  ##### #####  #####'
   Write-Host    '   d e s k t o p   o r g a n i z e r' -ForegroundColor White
-  Write-Host    "   by sinehan  .  desktop inbox-zero, one keypress at a time" -ForegroundColor DarkGray
+  Write-Host    "   by sinehan  .  tidy your desktop, one keypress at a time" -ForegroundColor DarkGray
   Write-Host    '   ----------------------------------------------------------' -ForegroundColor DarkGray
   Write-Host ''
 }

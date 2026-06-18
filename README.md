@@ -3,7 +3,7 @@
 d  e  s  k  t  o  p     o  r  g  a  n  i  z  e  r
 ```
 
-> desktop inbox-zero, one keypress at a time.
+> tidy your desktop, one keypress at a time.
 
 my desktop kept filling up with half-finished projects, random installers, and
 resumes. some of it was already safe on github, some of it existed *only* on my
