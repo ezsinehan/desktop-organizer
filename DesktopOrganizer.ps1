@@ -154,13 +154,17 @@ function Organize-LooseFiles {
 
 #region ---------- TUI ----------
 function Read-Key {
-  # Drop anything already sitting in the buffer (stray paste remnants, held keys)
-  # so each card waits for a fresh, deliberate keypress.
-  try { $Host.UI.RawUI.FlushInputBuffer() } catch {}
-  do {
-    $k = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-  } while ([int]$k.Character -eq 0)   # skip modifier-only keys (Shift, Ctrl, ...); Enter still counts
-  return [string]$k.Character
+  # Drain anything already queued (stray paste remnants, buffered newlines) so each
+  # card waits for a fresh, deliberate keypress. [Console]::KeyAvailable drains
+  # without blocking; RawUI.FlushInputBuffer is unreliable across hosts.
+  try {
+    while ([System.Console]::KeyAvailable) { [void][System.Console]::ReadKey($true) }
+    do { $k = [System.Console]::ReadKey($true) } while ([int]$k.KeyChar -eq 0)  # skip modifiers
+    return [string]$k.KeyChar
+  } catch {
+    # Fallback for hosts without a real console (ISE, redirected stdin): use Read-Host.
+    return (Read-Host).Trim()
+  }
 }
 
 # sinehan.dev house style: lowercase, pixel-art, white + subdued gray + rainbow accent.
