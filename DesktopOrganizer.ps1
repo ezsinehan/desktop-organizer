@@ -25,6 +25,10 @@
 $script:DesktopRoot = Join-Path $env:USERPROFILE 'Desktop'
 $script:ArchiveDir  = Join-Path $script:DesktopRoot 'Archive'
 $script:Protected   = @('desktop.ini', 'Archive', 'desktop-organizer', '.claude')
+# GitHub rejects any file >100MB and chokes on multi-GB repos. Folders past these
+# limits are steered to [A]rchive instead of a backup that would fail.
+$script:MaxRepoMB   = 1024
+$script:MaxFileMB   = 100
 $script:FileRoutes  = @{
   '.pdf'='Documents'; '.docx'='Documents'; '.doc'='Documents'; '.txt'='Documents';
   '.xlsx'='Documents'; '.xls'='Documents'; '.csv'='Documents'; '.pptx'='Documents';
@@ -70,14 +74,15 @@ function Get-DesktopInventory {
           }
         }
       }
+      if ($item.PSIsContainer) { $sizeMB = Get-FolderSizeMB $item.FullName }
+      else { $sizeMB = [math]::Round($item.Length/1MB, 2) }
+
       if     ($git -and $git.HasRemote -and $git.Ahead -eq 0 -and $git.Dirty -eq 0) { $status='pushed-clean';  $rec='keep'   }
       elseif ($git -and $git.HasRemote)        { $status="needs-push (ahead=$($git.Ahead), dirty=$($git.Dirty))"; $rec='push' }
       elseif ($git -and -not $git.HasRemote)   { $status='git, no remote';  $rec='push'    }
+      elseif ($item.PSIsContainer -and $sizeMB -gt $script:MaxRepoMB) { $status="too big for github ($sizeMB MB)"; $rec='archive' }
       elseif ($item.PSIsContainer)             { $status='no git backup';   $rec='backup'  }
       else                                     { $status='loose file';      $rec='sort'    }
-
-      if ($item.PSIsContainer) { $sizeMB = Get-FolderSizeMB $item.FullName }
-      else { $sizeMB = [math]::Round($item.Length/1MB, 2) }
 
       [PSCustomObject]@{
         Name=$item.Name; Kind=$kind; SizeMB=$sizeMB; Status=$status; Recommend=$rec
@@ -99,18 +104,41 @@ function Backup-ToPrivateRepo {
   param([Parameter(Mandatory)][string]$Path, [string]$RepoName,
         [string]$CommitMessage='Backup via DesktopOrganizer', [switch]$ThenDelete)
   if (-not $RepoName) { $RepoName = Split-Path $Path -Leaf }
+
+  # GUARD: GitHub rejects files >100MB and chokes on multi-GB repos. Refuse loudly
+  # rather than start a doomed push (and never, ever delete after a failed one).
+  $sizeMB  = Get-FolderSizeMB $Path
+  $bigFile = Get-ChildItem $Path -Recurse -File -Force -EA SilentlyContinue |
+             Where-Object { $_.Length -gt ($script:MaxFileMB * 1MB) } | Select-Object -First 1
+  if ($sizeMB -gt $script:MaxRepoMB -or $bigFile) {
+    Write-Host "  -> SKIPPED: too big for GitHub ($sizeMB MB$(if($bigFile){"; '$($bigFile.Name)' is $([math]::Round($bigFile.Length/1MB)) MB > $($script:MaxFileMB) MB"}))." -ForegroundColor Red
+    Write-Host "     use [A]rchive or cloud storage for this one. nothing was changed." -ForegroundColor DarkGray
+    return
+  }
+
+  # PowerShell does NOT throw when git/gh exit non-zero, so check $LASTEXITCODE after
+  # every step. $ok stays true only if the whole chain genuinely succeeded.
+  $ok = $true
   Push-Location $Path
   try {
-    if (-not (Test-Path '.git')) { & git init | Out-Null }
-    & git add -A
-    if (& git status --porcelain) { & git commit -m $CommitMessage | Out-Null }
-    if (& git remote get-url origin 2>$null) { & git push }
-    else { & gh repo create $RepoName --private --source=. --remote=origin --push }
-    Write-Host "  -> backed up to private repo '$RepoName'" -ForegroundColor Green
-    $ok = $true
-  } catch { Write-Host "  -> backup FAILED: $_" -ForegroundColor Red; $ok = $false }
+    if (-not (Test-Path '.git')) { & git init | Out-Null; if ($LASTEXITCODE -ne 0) { $ok = $false } }
+    if ($ok) { & git add -A;                                if ($LASTEXITCODE -ne 0) { $ok = $false } }
+    if ($ok -and (& git status --porcelain)) { & git commit -m $CommitMessage | Out-Null; if ($LASTEXITCODE -ne 0) { $ok = $false } }
+    if ($ok) {
+      if (& git remote get-url origin 2>$null) { & git push }
+      else { & gh repo create $RepoName --private --source=. --remote=origin --push }
+      if ($LASTEXITCODE -ne 0) { $ok = $false }
+    }
+  } catch { $ok = $false }
   finally { Pop-Location }
-  if ($ok -and $ThenDelete) { Remove-ItemToRecycle -Path $Path }
+
+  if ($ok) {
+    Write-Host "  -> backed up to private repo '$RepoName'" -ForegroundColor Green
+    if ($ThenDelete) { Remove-ItemToRecycle -Path $Path }
+  } else {
+    Write-Host "  -> backup FAILED - your folder was NOT deleted and is untouched." -ForegroundColor Red
+    Write-Host "     (check 'gh auth status' and that the repo name is free, then retry)" -ForegroundColor DarkGray
+  }
 }
 
 function Move-ToArchive {
@@ -190,7 +218,7 @@ function Show-Banner {
 
 function Write-Card {
   param($Item, [int]$Index, [int]$Total)
-  $recColor = @{ keep='DarkGray'; push='Yellow'; backup='Cyan'; sort='Gray' }[$Item.Recommend]
+  $recColor = @{ keep='DarkGray'; push='Yellow'; backup='Cyan'; sort='Gray'; archive='Red' }[$Item.Recommend]
   Show-Banner
   Write-Host ("   item $Index of $Total") -ForegroundColor DarkGray
   Write-Host ("  " + ('-'*58)) -ForegroundColor DarkGray
@@ -200,7 +228,8 @@ function Write-Card {
   if ($Item.Remote) { Write-Host ("   remote: {0}" -f $Item.Remote) -ForegroundColor DarkGray }
   Write-Host ("  " + ('-'*58)) -ForegroundColor DarkGray
   $hint = @{ keep='already safe - recommend KEEP'; push='has un-backed-up work - recommend PUSH'
-             backup='not in git anywhere - recommend BACK UP'; sort='loose file - handled in batch' }[$Item.Recommend]
+             backup='not in git anywhere - recommend BACK UP'; sort='loose file - handled in batch'
+             archive='too big for github - recommend ARCHIVE (or cloud storage)' }[$Item.Recommend]
   Write-Host ("   recommendation: {0}" -f $hint) -ForegroundColor $recColor
   Write-Host ""
   Write-Host "   [P]ush  [B]ackup+delete  [A]rchive  [D]elete  [O]pen  [K]eep  [Q]uit" -ForegroundColor White
